@@ -3,6 +3,7 @@ import pino from "pino";
 const REDACTED_PATHS = [
   "req.headers.authorization",
   "req.headers.cookie",
+  "req.headers.idempotency-key",
   "req.headers.x-api-key",
   "res.headers.set-cookie",
   "password",

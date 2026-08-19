@@ -9,7 +9,7 @@ import { ProblemError } from "./problem-error.js";
 export function createCors(configuration) {
   const allowedOrigins = new Set(configuration.allowedOrigins);
 
-  return cors({
+  const corsMiddleware = cors({
     allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id"],
     credentials: true,
     exposedHeaders: ["Retry-After", "X-Request-Id"],
@@ -32,4 +32,9 @@ export function createCors(configuration) {
       );
     },
   });
+
+  return (request, response, next) => {
+    response.vary("Origin");
+    corsMiddleware(request, response, next);
+  };
 }

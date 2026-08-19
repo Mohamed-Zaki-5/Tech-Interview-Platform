@@ -12,6 +12,14 @@ _Avoid_: Candidate, applicant, interviewee
 The operational availability of a User account: `ACTIVE` may authenticate, while `DISABLED` cannot create or refresh sessions.
 _Avoid_: Role, immediate access-token revocation
 
+**Refresh Session**:
+A User's independently revocable login relationship and its rotating Refresh Token family, bounded by a fixed absolute expiry.
+_Avoid_: Access token, browser session state
+
+**Refresh Token**:
+A rotating opaque credential that proves control of one Refresh Session and can obtain a new access token.
+_Avoid_: JWT, access token, stored raw token
+
 **Administrator**:
 A privileged user who manages the assessment content available to Users.
 _Avoid_: Interviewer, recruiter
@@ -66,6 +74,10 @@ _Avoid_: Keyword, public hint
 One auditable invocation of an evaluator for an Answer. Multiple attempts may exist, but only one successful attempt supplies the active evaluation outcome.
 _Avoid_: Assessment attempt, retry counter
 
+**Evaluation Job**:
+A deferred unit of Long Answer evaluation work with exclusive processing and bounded retry state.
+_Avoid_: General-purpose message, in-process task
+
 ## Content Catalog
 
 **Track**:
@@ -119,3 +131,9 @@ _Avoid_: Separate track score
 **Weak Area**:
 An active Topic at a specific Level where a User has enough evaluated Question instances and an Evaluated Score below the configured threshold.
 _Avoid_: Low-coverage Topic, insufficient-data Topic, adaptive recommendation
+
+## Platform Operations
+
+**Rate Limit Bucket**:
+The admission allowance for one continuous-refill policy and one pseudonymous client, account, or Refresh Session dimension.
+_Avoid_: Raw identifier log, fixed-window counter, process-local production limit

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getDomain } from "tldts";
 
 import { ConfigurationError } from "./configuration-error.js";
 
@@ -9,6 +10,18 @@ const BOOLEAN_VALUES = new Map([
 
 const environmentSchema = z.enum(["development", "test", "production"]);
 const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]);
+const RATE_LIMIT_POLICY_DEFINITIONS = {
+  assessmentStartIp: ["ASSESSMENT_START_IP", 30, 30, 3600],
+  assessmentStartUser: ["ASSESSMENT_START_USER", 10, 10, 3600],
+  loginEmail: ["LOGIN_EMAIL", 5, 5, 900],
+  loginIp: ["LOGIN_IP", 20, 20, 900],
+  logoutFamily: ["LOGOUT_FAMILY", 10, 10, 900],
+  logoutIp: ["LOGOUT_IP", 60, 60, 900],
+  refreshFamily: ["REFRESH_FAMILY", 10, 10, 900],
+  refreshIp: ["REFRESH_IP", 60, 60, 900],
+  registrationEmail: ["REGISTRATION_EMAIL", 3, 3, 3600],
+  registrationIp: ["REGISTRATION_IP", 10, 10, 3600],
+};
 
 /**
  * @param {string | undefined} value
@@ -33,6 +46,31 @@ function parseInteger(value) {
 
   const parsed = Number(value);
   return Number.isInteger(parsed) ? parsed : Number.NaN;
+}
+
+/**
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} environmentVariables
+ */
+function loadRateLimitPolicies(environmentVariables) {
+  return Object.fromEntries(
+    Object.entries(RATE_LIMIT_POLICY_DEFINITIONS).map(
+      ([policyName, [environmentPrefix, capacity, refillTokens, refillIntervalSeconds]]) => [
+        policyName,
+        {
+          capacity:
+            parseInteger(environmentVariables[`RATE_LIMIT_${environmentPrefix}_CAPACITY`]) ??
+            capacity,
+          refillIntervalSeconds:
+            parseInteger(
+              environmentVariables[`RATE_LIMIT_${environmentPrefix}_REFILL_INTERVAL_SECONDS`],
+            ) ?? refillIntervalSeconds,
+          refillTokens:
+            parseInteger(environmentVariables[`RATE_LIMIT_${environmentPrefix}_REFILL_TOKENS`]) ??
+            refillTokens,
+        },
+      ],
+    ),
+  );
 }
 
 /**
@@ -84,6 +122,18 @@ function isHttpsOrigin(value) {
     return url.protocol === "https:" && url.origin === value;
   } catch {
     return false;
+  }
+}
+
+/**
+ * @param {string} value
+ * @returns {string | null}
+ */
+function getRegistrableDomain(value) {
+  try {
+    return getDomain(new URL(value).hostname, { allowPrivateDomains: true });
+  } catch {
+    return null;
   }
 }
 
@@ -160,6 +210,7 @@ export function loadConfig(environmentVariables = process.env) {
       environmentVariables.RATE_LIMIT_HMAC_SECRET_BASE64 === undefined && isTest
         ? Buffer.alloc(32, 2)
         : rateLimitSecret,
+    rateLimitPolicies: loadRateLimitPolicies(environmentVariables),
     assessmentDurationHours:
       parseInteger(environmentVariables.ASSESSMENT_SESSION_DURATION_HOURS) ?? 24,
     maximumQuestionCount: parseInteger(environmentVariables.ASSESSMENT_MAX_QUESTION_COUNT) ?? 50,
@@ -219,17 +270,22 @@ export function loadConfig(environmentVariables = process.env) {
     "WEAK_AREA_MINIMUM_EVALUATED_QUESTIONS",
     raw.weakMinimumEvaluatedQuestions,
   );
-  requirePositiveInteger(
-    "ARGON2_MEMORY_COST_KIB",
-    raw.argonMemoryCostKiB,
-    isProduction ? 65_536 : 1,
-  );
-  requirePositiveInteger("ARGON2_TIME_COST", raw.argonTimeCost, isProduction ? 3 : 1);
-  requirePositiveInteger("ARGON2_PARALLELISM", raw.argonParallelism, isProduction ? 4 : 1);
-  requirePositiveInteger("ARGON2_HASH_LENGTH", raw.argonHashLength, isProduction ? 32 : 1);
+  requirePositiveInteger("ARGON2_MEMORY_COST_KIB", raw.argonMemoryCostKiB, isTest ? 1 : 65_536);
+  requirePositiveInteger("ARGON2_TIME_COST", raw.argonTimeCost, isTest ? 1 : 3);
+  requirePositiveInteger("ARGON2_PARALLELISM", raw.argonParallelism, isTest ? 1 : 4);
+  requirePositiveInteger("ARGON2_HASH_LENGTH", raw.argonHashLength, isTest ? 1 : 32);
   requirePositiveInteger("ARGON2_MAX_CONCURRENCY", raw.argonConcurrency);
   requirePositiveInteger("ARGON2_QUEUE_LIMIT", raw.argonQueueLimit);
   requirePositiveInteger("ARGON2_QUEUE_TIMEOUT_MS", raw.argonQueueTimeoutMs);
+  for (const [policyName, [environmentPrefix]] of Object.entries(RATE_LIMIT_POLICY_DEFINITIONS)) {
+    const policy = raw.rateLimitPolicies[policyName];
+    requirePositiveInteger(`RATE_LIMIT_${environmentPrefix}_CAPACITY`, policy.capacity);
+    requirePositiveInteger(`RATE_LIMIT_${environmentPrefix}_REFILL_TOKENS`, policy.refillTokens);
+    requirePositiveInteger(
+      `RATE_LIMIT_${environmentPrefix}_REFILL_INTERVAL_SECONDS`,
+      policy.refillIntervalSeconds,
+    );
+  }
 
   if (
     !Number.isInteger(raw.weakScoreThresholdPercentage) ||
@@ -247,6 +303,21 @@ export function loadConfig(environmentVariables = process.env) {
       invalidKeys.push("CORS_ALLOWED_ORIGINS");
     }
     if (!raw.allowedOrigins?.includes(raw.publicFrontendOrigin ?? "")) {
+      invalidKeys.push("CORS_ALLOWED_ORIGINS");
+    }
+
+    const apiRegistrableDomain = getRegistrableDomain(raw.publicApiOrigin ?? "");
+    const frontendRegistrableDomain = getRegistrableDomain(raw.publicFrontendOrigin ?? "");
+    if (
+      apiRegistrableDomain === null ||
+      frontendRegistrableDomain === null ||
+      frontendRegistrableDomain !== apiRegistrableDomain
+    ) {
+      invalidKeys.push("PUBLIC_FRONTEND_ORIGIN");
+    }
+    if (
+      raw.allowedOrigins?.some((origin) => getRegistrableDomain(origin) !== apiRegistrableDomain)
+    ) {
       invalidKeys.push("CORS_ALLOWED_ORIGINS");
     }
   }
@@ -283,7 +354,10 @@ export function loadConfig(environmentVariables = process.env) {
       jwtSigningSecret: raw.jwtSigningSecret,
       refreshSessionLifetimeDays: 7,
     },
-    rateLimiting: { hmacSecret: raw.rateLimitSecret },
+    rateLimiting: {
+      hmacSecret: raw.rateLimitSecret,
+      policies: raw.rateLimitPolicies,
+    },
     assessment: {
       maximumQuestionCount: raw.maximumQuestionCount,
       sessionDurationHours: raw.assessmentDurationHours,

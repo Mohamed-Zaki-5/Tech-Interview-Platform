@@ -78,7 +78,7 @@ REST module composition uses the documented route names under `/api/v1`. Process
 
 Public errors use RFC 9457-style Problem Details with `application/problem+json`. Safe fields are `type`, `title`, `status`, `code`, `detail`, `instance`, and `requestId`; `errors` appears only for safe field-validation details. Stack traces, database details, secrets, private scoring data, provider data, and raw internal errors are never serialized.
 
-Structured operational logging is the MVP audit sink for controlled account-status changes. No database audit entity exists in Phase 1. Logs use request identifiers and redact Authorization, Cookie, token, password, and secret fields.
+Structured operational logging is the MVP audit sink for controlled account-status changes. No database audit entity exists in Phase 1. Logs use request identifiers and redact Authorization, Cookie, Idempotency-Key, token, password, and secret fields.
 
 ## Content Catalog
 
@@ -399,7 +399,7 @@ Production uses Argon2id version 1.3/19 with a minimum baseline of 65,536 KiB me
 
 The baseline is the lower-memory recommended profile in [RFC 9106](https://www.rfc-editor.org/rfc/rfc9106.html#section-4).
 
-Production startup rejects missing or below-baseline configuration. Request data can never choose hashing parameters. Older encoded hashes remain verifiable; after successful verification only, a weaker hash is safely replaced with one using current parameters. Parameter upgrades apply to new hashes and migrate old hashes gradually without breaking verification.
+Every non-test environment rejects missing or below-baseline configuration. Only the explicitly isolated automated-test environment may select reduced parameters. Request data can never choose hashing parameters. Older encoded hashes remain verifiable; after successful verification only, a weaker hash is safely replaced with one using current parameters. Parameter upgrades apply to new hashes and migrate old hashes gradually without breaking verification.
 
 Before production, registration, successful and failed login, rehashing, and representative concurrent load are benchmarked on production-class hardware. Individual and concurrent latency and memory behavior are documented. Hosting unable to support the baseline is a deployment-capacity problem, not justification to reduce parameters.
 
@@ -508,7 +508,7 @@ The production Refresh Token cookie is `Secure`, `HttpOnly`, host-only, and `Sam
 
 CORS uses one or more explicit approved frontend origins with exact matching, credentials enabled only for approved origins, required methods and headers only, and correct `Vary: Origin` behavior. Wildcards and suffix matching are forbidden. Browser refresh and logout require a present, exactly approved Origin header in production. A separate CSRF token is not used under this same-site policy.
 
-Environment configuration defines the public frontend origin, public API origin, exact CORS allowlist, and cookie Secure, SameSite, and Path values. Local development may explicitly allow configured localhost origins and development-only cookie attributes.
+Environment configuration defines the public frontend origin, public API origin, exact CORS allowlist, and cookie Secure, SameSite, and Path values. Production startup resolves registrable domains using both the ICANN and private sections of the public suffix list and rejects an API, frontend, or allowed browser origin outside the API's registrable domain. Local development may explicitly allow configured localhost origins and development-only cookie attributes.
 
 Production must never silently switch to `SameSite=None`. If unrelated public domains become unavoidable, deployment pauses for an explicit redesign using `SameSite=None; Secure`, strict Origin checks, exact credentialed CORS, and a separate CSRF token.
 

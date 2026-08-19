@@ -53,6 +53,36 @@ describe("loadConfig", () => {
         parallelism: 4,
         timeCost: 3,
       },
+      rateLimiting: {
+        policies: {
+          assessmentStartIp: {
+            capacity: 30,
+            refillIntervalSeconds: 3600,
+            refillTokens: 30,
+          },
+          assessmentStartUser: {
+            capacity: 10,
+            refillIntervalSeconds: 3600,
+            refillTokens: 10,
+          },
+          loginEmail: { capacity: 5, refillIntervalSeconds: 900, refillTokens: 5 },
+          loginIp: { capacity: 20, refillIntervalSeconds: 900, refillTokens: 20 },
+          logoutFamily: { capacity: 10, refillIntervalSeconds: 900, refillTokens: 10 },
+          logoutIp: { capacity: 60, refillIntervalSeconds: 900, refillTokens: 60 },
+          refreshFamily: { capacity: 10, refillIntervalSeconds: 900, refillTokens: 10 },
+          refreshIp: { capacity: 60, refillIntervalSeconds: 900, refillTokens: 60 },
+          registrationEmail: {
+            capacity: 3,
+            refillIntervalSeconds: 3600,
+            refillTokens: 3,
+          },
+          registrationIp: {
+            capacity: 10,
+            refillIntervalSeconds: 3600,
+            refillTokens: 10,
+          },
+        },
+      },
       weakAreas: {
         minimumEvaluatedQuestions: 5,
         scoreThresholdPercentage: 60,
@@ -120,6 +150,91 @@ describe("loadConfig", () => {
     ).toThrowError(
       expect.objectContaining({
         invalidKeys: expect.arrayContaining(["API_PORT", "COOKIE_SECURE"]),
+      }),
+    );
+  });
+
+  it("rejects production frontend and API origins on unrelated registrable domains", () => {
+    expect(() =>
+      loadConfig({
+        ...productionEnvironment,
+        CORS_ALLOWED_ORIGINS: "https://interview-platform.vercel.app",
+        PUBLIC_API_ORIGIN: "https://interview-platform.onrender.com",
+        PUBLIC_FRONTEND_ORIGIN: "https://interview-platform.vercel.app",
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        invalidKeys: expect.arrayContaining(["PUBLIC_FRONTEND_ORIGIN"]),
+      }),
+    );
+  });
+
+  it("does not treat separate private hosting tenants as one same-site deployment", () => {
+    expect(() =>
+      loadConfig({
+        ...productionEnvironment,
+        CORS_ALLOWED_ORIGINS: "https://frontend-team.vercel.app",
+        PUBLIC_API_ORIGIN: "https://backend-team.vercel.app",
+        PUBLIC_FRONTEND_ORIGIN: "https://frontend-team.vercel.app",
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        invalidKeys: expect.arrayContaining(["PUBLIC_FRONTEND_ORIGIN"]),
+      }),
+    );
+  });
+
+  it("allows reduced Argon2 parameters only in the isolated test environment", () => {
+    expect(() =>
+      loadConfig({
+        ...productionEnvironment,
+        ARGON2_HASH_LENGTH: "1",
+        ARGON2_MEMORY_COST_KIB: "1",
+        ARGON2_PARALLELISM: "1",
+        ARGON2_TIME_COST: "1",
+        COOKIE_SECURE: "false",
+        NODE_ENV: "development",
+        PUBLIC_API_ORIGIN: "http://localhost:3000",
+        PUBLIC_FRONTEND_ORIGIN: "http://localhost:5173",
+        CORS_ALLOWED_ORIGINS: "http://localhost:5173",
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        invalidKeys: expect.arrayContaining([
+          "ARGON2_MEMORY_COST_KIB",
+          "ARGON2_TIME_COST",
+          "ARGON2_PARALLELISM",
+          "ARGON2_HASH_LENGTH",
+        ]),
+      }),
+    );
+
+    expect(
+      loadConfig({
+        ARGON2_HASH_LENGTH: "1",
+        ARGON2_MEMORY_COST_KIB: "1",
+        ARGON2_PARALLELISM: "1",
+        ARGON2_TIME_COST: "1",
+        NODE_ENV: "test",
+      }).passwordHashing,
+    ).toMatchObject({ hashLength: 1, memoryCostKiB: 1, parallelism: 1, timeCost: 1 });
+  });
+
+  it("rejects non-positive production rate-limit policy values", () => {
+    expect(() =>
+      loadConfig({
+        ...productionEnvironment,
+        RATE_LIMIT_LOGIN_IP_CAPACITY: "0",
+        RATE_LIMIT_REFRESH_FAMILY_REFILL_INTERVAL_SECONDS: "0",
+        RATE_LIMIT_REGISTRATION_EMAIL_REFILL_TOKENS: "0",
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        invalidKeys: expect.arrayContaining([
+          "RATE_LIMIT_LOGIN_IP_CAPACITY",
+          "RATE_LIMIT_REFRESH_FAMILY_REFILL_INTERVAL_SECONDS",
+          "RATE_LIMIT_REGISTRATION_EMAIL_REFILL_TOKENS",
+        ]),
       }),
     );
   });

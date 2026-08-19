@@ -39,6 +39,7 @@ describe("CORS", () => {
 
     expect(response.status).toBe(403);
     expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(response.headers.vary).toContain("Origin");
     expect(response.body).toMatchObject({
       code: "ORIGIN_NOT_ALLOWED",
       detail: "The request origin is not allowed.",
