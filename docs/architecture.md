@@ -15,7 +15,7 @@
 - Initial technology coverage: React and Node.js
 - Delivery target: a realistic MVP within one week
 
-The supported Phase 1 production runtime is Node.js 24.19.0 with npm 11. Source and configuration use modern ECMAScript modules. JavaScript is checked with TypeScript `allowJs`/`checkJs` in no-emit mode; TypeScript application files are not used.
+The supported Phase 1 production runtime is Node.js 24.19.0 with npm 11. Source and configuration use modern ECMAScript modules. JavaScript is checked with TypeScript `allowJs`/`checkJs` in no-emit mode; TypeScript application files are not used. Backend runtime, tooling, source, tests, and Prisma files live in the `backend/` workspace, while shared documentation remains at the repository root and the separately maintained React application belongs in `frontend/`.
 
 ### Confirmed Product Boundary
 
@@ -283,7 +283,7 @@ The MVP uses a deliberately small PostgreSQL-backed asynchronous queue, not a ge
 
 Assessment submission and Answer creation occur in one database transaction. For each Long Answer, submission creates an Evaluation status. If an AI provider is configured, the transaction also creates a `PENDING` private Evaluation Job. If no provider is configured, the Evaluation becomes `NOT_EVALUATED` and no job is created. The same transaction completes the Assessment, and the HTTP response returns its current partial Result without waiting for AI.
 
-The API and worker are separate process roles in the same modular-monolith codebase and deployment artifact, with entry points such as `npm run start:api` and `npm run start:worker`. The API process never performs in-process fire-and-forget evaluation.
+The API and worker are separate process roles in the same modular-monolith codebase and deployment artifact, with entry points such as `npm run start:api` and `npm run start:worker` run from the `backend/` workspace. The API process never performs in-process fire-and-forget evaluation.
 
 The worker lifecycle is:
 

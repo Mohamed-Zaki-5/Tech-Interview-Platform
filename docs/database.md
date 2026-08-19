@@ -1,6 +1,6 @@
 # Database Design
 
-This document describes the PostgreSQL/Prisma model implemented initially in `prisma/schema.prisma` and `prisma/migrations/20260819000000_phase_1_foundation/migration.sql`. Later phases add application workflows without weakening these persistence invariants.
+This document describes the PostgreSQL/Prisma model implemented initially in `backend/prisma/schema.prisma` and `backend/prisma/migrations/20260819000000_phase_1_foundation/migration.sql`. Later phases add application workflows without weakening these persistence invariants.
 
 ## Proposed Entity Map
 

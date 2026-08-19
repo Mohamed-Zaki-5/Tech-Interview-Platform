@@ -18,7 +18,8 @@ If these files do not exist, proceed without creating placeholders. The domain-m
 |-- CONTEXT.md
 |-- docs/
 |   `-- adr/
-`-- src/
+`-- backend/
+    `-- src/
 ```
 
 ## Vocabulary
