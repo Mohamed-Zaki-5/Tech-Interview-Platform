@@ -1,0 +1,497 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum RefreshSessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum RefreshTokenStatus {
+  ACTIVE
+  ROTATED
+  REVOKED
+  EXPIRED
+}
+
+enum CatalogStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum Level {
+  JUNIOR
+  MID_LEVEL
+  SENIOR
+}
+
+enum QuestionType {
+  MCQ
+  TRUE_FALSE
+  SHORT_ANSWER
+  LONG_ANSWER
+}
+
+enum RubricPatternKind {
+  ACCEPTED
+  REJECTION
+}
+
+enum AssessmentStatus {
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+  ABANDONED
+}
+
+enum TopicFilterMode {
+  ALL_ACTIVE
+  EXPLICIT
+}
+
+enum EvaluationStatus {
+  PENDING
+  EVALUATED
+  NOT_EVALUATED
+  EVALUATION_FAILED
+}
+
+enum EvaluationAttemptStatus {
+  SUCCEEDED
+  FAILED
+}
+
+enum EvaluationJobStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id              String        @id @default(uuid()) @db.Uuid
+  email           String        @unique @db.VarChar(320)
+  passwordHash    String        @db.VarChar(512)
+  displayName     String        @db.VarChar(100)
+  role            Role          @default(USER)
+  status          AccountStatus @default(ACTIVE)
+  statusChangedAt DateTime      @default(now()) @db.Timestamptz(6)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime      @updatedAt @db.Timestamptz(6)
+
+  refreshSessions RefreshSession[]
+  assessments     Assessment[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model RefreshSession {
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @db.Uuid
+  familyId         String               @unique @default(uuid()) @db.Uuid
+  status           RefreshSessionStatus @default(ACTIVE)
+  expiresAt        DateTime             @db.Timestamptz(6)
+  revokedAt        DateTime?            @db.Timestamptz(6)
+  revocationReason String?              @db.VarChar(100)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime             @updatedAt @db.Timestamptz(6)
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tokens RefreshToken[]
+
+  @@index([userId, status, expiresAt])
+  @@index([status, expiresAt])
+}
+
+model RefreshToken {
+  id               String             @id @default(uuid()) @db.Uuid
+  sessionId        String             @db.Uuid
+  tokenHash        Bytes              @unique
+  status           RefreshTokenStatus @default(ACTIVE)
+  expiresAt        DateTime           @db.Timestamptz(6)
+  usedAt           DateTime?          @db.Timestamptz(6)
+  revokedAt        DateTime?          @db.Timestamptz(6)
+  revocationReason String?            @db.VarChar(100)
+  replacedById     String?            @unique @db.Uuid
+  createdAt        DateTime           @default(now()) @db.Timestamptz(6)
+
+  session    RefreshSession @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  replacedBy RefreshToken?  @relation("RefreshTokenRotation", fields: [replacedById], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  replaces   RefreshToken?  @relation("RefreshTokenRotation")
+
+  @@index([sessionId, status, expiresAt])
+  @@index([status, expiresAt])
+}
+
+model RateLimitBucket {
+  id           String   @id @default(uuid()) @db.Uuid
+  policyScope  String   @db.VarChar(100)
+  keyDigest    Bytes
+  tokens       Decimal  @db.Decimal(20, 8)
+  lastRefillAt DateTime @db.Timestamptz(6)
+  expiresAt    DateTime @db.Timestamptz(6)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([policyScope, keyDigest])
+  @@index([expiresAt])
+}
+
+model Track {
+  id          String        @id @default(uuid()) @db.Uuid
+  slug        String        @unique @db.VarChar(100)
+  name        String        @db.VarChar(120)
+  description String?       @db.Text
+  status      CatalogStatus @default(DRAFT)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(6)
+
+  technologies TrackTechnology[]
+
+  @@index([status, name])
+}
+
+model Technology {
+  id          String        @id @default(uuid()) @db.Uuid
+  slug        String        @unique @db.VarChar(100)
+  name        String        @db.VarChar(120)
+  description String?       @db.Text
+  status      CatalogStatus @default(DRAFT)
+  createdAt   DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(6)
+
+  tracks      TrackTechnology[]
+  topics      Topic[]
+  assessments Assessment[]
+
+  @@index([status, name])
+}
+
+model TrackTechnology {
+  trackId      String   @db.Uuid
+  technologyId String   @db.Uuid
+  position     Int
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  track      Track      @relation(fields: [trackId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  technology Technology @relation(fields: [technologyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([trackId, technologyId])
+  @@unique([trackId, position])
+  @@index([technologyId])
+}
+
+model Topic {
+  id           String        @id @default(uuid()) @db.Uuid
+  technologyId String        @db.Uuid
+  slug         String        @db.VarChar(100)
+  name         String        @db.VarChar(120)
+  description  String?       @db.Text
+  status       CatalogStatus @default(DRAFT)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(6)
+
+  technology        Technology              @relation(fields: [technologyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  questions         Question[]
+  assessmentFilters AssessmentTopicFilter[]
+
+  @@unique([technologyId, slug])
+  @@index([technologyId, status, name])
+}
+
+model Question {
+  id                  String        @id @default(uuid()) @db.Uuid
+  topicId             String        @db.Uuid
+  type                QuestionType
+  level               Level
+  difficulty          Int
+  text                String        @db.Text
+  status              CatalogStatus @default(DRAFT)
+  referenceAnswer     String?       @db.Text
+  correctBoolean      Boolean?
+  minimumAnswerLength Int?
+  maximumAnswerLength Int?
+  rubricVersion       String?       @db.VarChar(100)
+  evaluatorVersion    String?       @db.VarChar(100)
+  promptVersion       String?       @db.VarChar(100)
+  createdAt           DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime      @updatedAt @db.Timestamptz(6)
+
+  topic               Topic                @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  options             QuestionOption[]
+  rubricCriteria      RubricCriterion[]
+  assessmentQuestions AssessmentQuestion[]
+
+  @@index([topicId, status, level, type, difficulty])
+  @@index([status, type, level, difficulty])
+}
+
+model QuestionOption {
+  id         String   @id @default(uuid()) @db.Uuid
+  questionId String   @db.Uuid
+  text       String   @db.Text
+  position   Int
+  isCorrect  Boolean  @default(false)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(6)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([questionId, position])
+  @@index([questionId, isCorrect])
+}
+
+model RubricCriterion {
+  id               String   @id @default(uuid()) @db.Uuid
+  questionId       String   @db.Uuid
+  stableIdentifier String   @db.VarChar(100)
+  description      String   @db.Text
+  weight           Decimal  @db.Decimal(8, 7)
+  position         Int
+  createdAt        DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(6)
+
+  question Question        @relation(fields: [questionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  patterns RubricPattern[]
+
+  @@unique([questionId, stableIdentifier])
+  @@unique([questionId, position])
+}
+
+model RubricPattern {
+  id          String            @id @default(uuid()) @db.Uuid
+  criterionId String            @db.Uuid
+  kind        RubricPatternKind
+  phrase      String            @db.Text
+  position    Int
+  createdAt   DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(6)
+
+  criterion RubricCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([criterionId, kind, position])
+  @@index([criterionId, kind])
+}
+
+model Assessment {
+  id                        String           @id @default(uuid()) @db.Uuid
+  userId                    String           @db.Uuid
+  technologyId              String           @db.Uuid
+  technologySnapshotLabel   String           @db.VarChar(120)
+  level                     Level
+  status                    AssessmentStatus @default(IN_PROGRESS)
+  topicFilterMode           TopicFilterMode
+  requestedMcqCount         Int
+  requestedTrueFalseCount   Int
+  requestedShortAnswerCount Int
+  requestedLongAnswerCount  Int
+  actualMcqCount            Int
+  actualTrueFalseCount      Int
+  actualShortAnswerCount    Int
+  actualLongAnswerCount     Int
+  startIdempotencyKeyDigest Bytes
+  startCanonicalPayloadHash Bytes
+  startedAt                 DateTime         @default(now()) @db.Timestamptz(6)
+  expiresAt                 DateTime         @db.Timestamptz(6)
+  completedAt               DateTime?        @db.Timestamptz(6)
+  abandonedAt               DateTime?        @db.Timestamptz(6)
+  createdAt                 DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime         @updatedAt @db.Timestamptz(6)
+
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  technology   Technology              @relation(fields: [technologyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  topicFilters AssessmentTopicFilter[]
+  questions    AssessmentQuestion[]
+  submission   AssessmentSubmission?
+
+  @@unique([userId, startIdempotencyKeyDigest])
+  @@unique([id, userId])
+  @@index([userId, startedAt(sort: Desc), id(sort: Desc)])
+  @@index([userId, status, startedAt(sort: Desc)])
+  @@index([userId, technologyId, level, startedAt(sort: Desc)])
+  @@index([userId, status, completedAt])
+}
+
+model AssessmentTopicFilter {
+  assessmentId String @db.Uuid
+  topicId      String @db.Uuid
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([assessmentId, topicId])
+  @@index([topicId])
+}
+
+model AssessmentQuestion {
+  id                      String       @id @default(uuid()) @db.Uuid
+  assessmentId            String       @db.Uuid
+  sourceQuestionId        String       @db.Uuid
+  type                    QuestionType
+  text                    String       @db.Text
+  level                   Level
+  difficulty              Int
+  technologySnapshotId    String       @db.Uuid
+  technologySnapshotLabel String       @db.VarChar(120)
+  topicSnapshotId         String       @db.Uuid
+  topicSnapshotLabel      String       @db.VarChar(120)
+  publicOptions           Json?
+  privateCorrectAnswer    Json?
+  privateReferenceAnswer  String?      @db.Text
+  privateRubric           Json?
+  rubricVersion           String?      @db.VarChar(100)
+  normalizationVersion    String?      @db.VarChar(100)
+  evaluatorVersion        String?      @db.VarChar(100)
+  promptVersion           String?      @db.VarChar(100)
+  snapshotSchemaVersion   Int
+  maxPoints               Decimal      @default(1) @db.Decimal(8, 4)
+  position                Int
+  createdAt               DateTime     @default(now()) @db.Timestamptz(6)
+
+  assessment     Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sourceQuestion Question   @relation(fields: [sourceQuestionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  answer         Answer?
+
+  @@unique([assessmentId, sourceQuestionId])
+  @@unique([assessmentId, position])
+  @@index([sourceQuestionId, createdAt(sort: Desc)])
+  @@index([assessmentId, type, topicSnapshotId])
+  @@index([technologySnapshotId, topicSnapshotId, level, type])
+}
+
+model AssessmentSubmission {
+  id                   String   @id @default(uuid()) @db.Uuid
+  assessmentId         String   @unique @db.Uuid
+  userId               String   @db.Uuid
+  idempotencyKeyDigest Bytes
+  canonicalPayloadHash Bytes
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+
+  assessment Assessment @relation(fields: [assessmentId, userId], references: [id, userId], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([userId, idempotencyKeyDigest])
+  @@unique([assessmentId, userId])
+  @@index([userId, createdAt])
+}
+
+model Answer {
+  id                   String   @id @default(uuid()) @db.Uuid
+  assessmentQuestionId String   @unique @db.Uuid
+  selectedOptionId     String?  @db.Uuid
+  booleanValue         Boolean?
+  textValue            String?  @db.Text
+  createdAt            DateTime @default(now()) @db.Timestamptz(6)
+
+  assessmentQuestion AssessmentQuestion @relation(fields: [assessmentQuestionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  evaluation         Evaluation?
+  evaluationJobs     EvaluationJob[]
+}
+
+model Evaluation {
+  id                          String           @id @default(uuid()) @db.Uuid
+  answerId                    String           @unique @db.Uuid
+  status                      EvaluationStatus
+  awardedPoints               Decimal?         @db.Decimal(8, 4)
+  safeFeedback                String?          @db.Text
+  evaluatorVersion            String?          @db.VarChar(100)
+  matchedCriterionIdentifiers Json?
+  activeAttemptId             String?          @unique @db.Uuid
+  createdAt                   DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt                   DateTime         @updatedAt @db.Timestamptz(6)
+
+  answer        Answer              @relation(fields: [answerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  attempts      EvaluationAttempt[] @relation("EvaluationAttempts")
+  activeAttempt EvaluationAttempt?  @relation("ActiveEvaluationAttempt", fields: [activeAttemptId, id], references: [id, evaluationId], onDelete: Restrict, onUpdate: Cascade)
+  jobs          EvaluationJob[]
+
+  @@unique([activeAttemptId, id])
+  @@unique([id, answerId])
+  @@index([status])
+  @@index([activeAttemptId])
+}
+
+model EvaluationAttempt {
+  id                        String                  @id @default(uuid()) @db.Uuid
+  evaluationId              String                  @db.Uuid
+  status                    EvaluationAttemptStatus
+  providerIdentifier        String                  @db.VarChar(100)
+  modelIdentifier           String                  @db.VarChar(200)
+  providerRequestIdentifier String?                 @db.VarChar(255)
+  rubricVersion             String                  @db.VarChar(100)
+  evaluatorVersion          String                  @db.VarChar(100)
+  promptVersion             String                  @db.VarChar(100)
+  finalPoints               Decimal?                @db.Decimal(8, 4)
+  errorCode                 String?                 @db.VarChar(100)
+  sanitizedErrorMessage     String?                 @db.Text
+  usageMetadata             Json?
+  attemptedAt               DateTime                @default(now()) @db.Timestamptz(6)
+  createdAt                 DateTime                @default(now()) @db.Timestamptz(6)
+
+  evaluation          Evaluation                   @relation("EvaluationAttempts", fields: [evaluationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  activeForEvaluation Evaluation?                  @relation("ActiveEvaluationAttempt")
+  criteria            EvaluationAttemptCriterion[]
+
+  @@unique([id, evaluationId])
+  @@index([evaluationId, attemptedAt(sort: Desc)])
+  @@index([providerRequestIdentifier])
+}
+
+model EvaluationAttemptCriterion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  evaluationAttemptId String   @db.Uuid
+  criterionIdentifier String   @db.VarChar(100)
+  awardedFraction     Decimal  @db.Decimal(8, 7)
+  privateEvidence     String   @db.Text
+  safeFeedback        String?  @db.Text
+  createdAt           DateTime @default(now()) @db.Timestamptz(6)
+
+  evaluationAttempt EvaluationAttempt @relation(fields: [evaluationAttemptId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([evaluationAttemptId, criterionIdentifier])
+  @@index([evaluationAttemptId])
+}
+
+model EvaluationJob {
+  id                    String              @id @default(uuid()) @db.Uuid
+  answerId              String              @db.Uuid
+  evaluationId          String              @db.Uuid
+  status                EvaluationJobStatus @default(PENDING)
+  attemptCount          Int                 @default(0)
+  maxAttempts           Int
+  availableAt           DateTime            @default(now()) @db.Timestamptz(6)
+  lockedAt              DateTime?           @db.Timestamptz(6)
+  lockExpiresAt         DateTime?           @db.Timestamptz(6)
+  lockToken             String?             @db.Uuid
+  lastErrorCode         String?             @db.VarChar(100)
+  sanitizedErrorMessage String?             @db.Text
+  deduplicationKey      Bytes               @unique
+  createdAt             DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime            @updatedAt @db.Timestamptz(6)
+
+  answer     Answer     @relation(fields: [answerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  evaluation Evaluation @relation(fields: [evaluationId, answerId], references: [id, answerId], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([status, availableAt])
+  @@index([status, lockExpiresAt])
+  @@index([evaluationId, createdAt])
+  @@index([answerId, createdAt])
+}

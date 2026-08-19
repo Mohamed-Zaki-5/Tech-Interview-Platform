@@ -28,6 +28,13 @@ Thumbs.db
 # Coverage
 coverage/
 
+# Generated Prisma client
+src/generated/
+
+# Local Prisma artifacts
+prisma/*.db
+prisma/*.db-journal
+
 # Temporary files
 *.tmp
 *.temp
