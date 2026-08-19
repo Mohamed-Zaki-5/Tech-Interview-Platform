@@ -1,0 +1,70 @@
+{
+  "name": "tech-interview-platform-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Modular-monolith backend for the Technical Interview Platform.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.19.0 <25",
+    "npm": ">=11 <12"
+  },
+  "packageManager": "npm@11.16.0",
+  "overrides": {
+    "deepmerge-ts": "8.0.1"
+  },
+  "scripts": {
+    "dev": "npm run dev:api",
+    "dev:api": "node --watch src/api/main.js",
+    "dev:worker": "node --watch src/worker/main.js",
+    "start": "npm run start:api",
+    "start:api": "node src/api/main.js",
+    "start:worker": "node src/worker/main.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\" \"*.js\" .prettierrc.json jsconfig.json package.json README.md",
+    "format:check": "prettier --check \"src/**/*.js\" \"tests/**/*.js\" \"*.js\" .prettierrc.json jsconfig.json package.json README.md",
+    "typecheck": "tsc -p jsconfig.json",
+    "prisma:format": "prisma format",
+    "prisma:validate": "prisma validate",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "pg": "^8.23.0",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "tldts": "^7.0.21",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "@types/punycode": "^2.1.4",
+    "@types/supertest": "^7.2.1",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
+    "prisma": "^7.9.1",
+    "supertest": "^7.2.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "@prisma/engines@7.9.1": true,
+    "prisma@7.9.1": true
+  }
+}
